@@ -1,2 +1,2 @@
-# 6.867
+# ML_Project
 Machine learning course Project
