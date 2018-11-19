@@ -94,6 +94,10 @@ memory = ReplayMemory(10000)
 optimizer = optim.Adam(model.parameters(), LR)
 steps_done = 0
 episode_durations = []
+state0 = StateNet().load_model_dict(torch.load("model_0.torch"))
+state1 = StateNet().load_model_dict(torch.load("model_1.torch"))
+state2 = StateNet().load_model_dict(torch.load("model_2.torch"))
+state3 = StateNet().load_model_dict(torch.load("model_3.torch"))
 
 
 def select_action(state):
@@ -114,7 +118,14 @@ def run_episode(e, environment):
     while True:
         environment.render()
         action = select_action(FloatTensor([state]))
-        next_state, reward, done, _ = environment.step(action.item())
+        _state = action.item()
+        next_state, reward, done, _ = environment.step(_state)
+
+        # Overwrite info from env with our NN preds
+        next_state[0] = state_0(_state[0])
+        next_state[1] = state_1(_state[1])
+        next_state[2] = state_2(_state[2])
+        next_state[3] = state_3(_state[3])
 
         # negative reward when attempt ends
         if done:
