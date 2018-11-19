@@ -178,7 +178,7 @@ def plot_durations():
         means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
         means = torch.cat((torch.zeros(99), means))
         plt.plot(means.numpy())
-    plt.savefig('reward_vs_episode_DDQN')
+    plt.savefig('reward_vs_episode_DDQN.png')
 
     plt.pause(0.001)  # pause a bit so that plots are updated
 
