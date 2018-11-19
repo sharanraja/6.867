@@ -1,3 +1,6 @@
+# Neural network to approximate state vector.
+# Loss - MSE Loss
+# Use different networks for each input
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -10,7 +13,7 @@ import numpy as np
 
 env = gym.make("CartPole-v0")
 
-
+# Neural network to approximate state vectors
 class Net(nn.Module):
 
     def __init__(self):
@@ -43,46 +46,27 @@ opt_3 = Adam(model_3.parameters(), lr = η)
 
 
 
+# Generate training data
 l = []
 replay_array = []
-#replay_array_curr = []
 for epoch in range(200):
 
     curr = env.reset()
-    #curr = torch.from_numpy(curr).float()
     for i in range(200):
 
         # Generate a random step
         st = random.randint(0,1)
         nex, rew, done, info = env.step(st)
-        #nex = torch.from_numpy(nex).float()
         replay_array.append((curr, st, nex, rew, done))
-        #replay_array_curr.append(curr)
         if done:
             break
 
-        # Create input for our network and generate prediction
-#         input = torch.from_numpy(np.append(curr,st)).float()
-#         nex_pred = model(input)
-
-#         # Calculate loss
-#         loss = loss_fn(nex_pred, nex)
-
-#         # Backprop
-#         opt.zero_grad()
-#         loss.backward()
-#         opt.step()
-
         curr = nex
 
-#     l.append(loss.item())
-
-#     epoch % 1000 == 0 and print("Epoch %d done" % epoch)
-
-#plt.plot(l)
 
 
 
+# Train the network
 l = []
 replay_size = len(replay_array)
 for epoch in range(22000):
@@ -138,12 +122,16 @@ for epoch in range(22000):
     loss     = loss_fn(nex,nex_pred)
     l.append(loss.item())
 
-    #epoch % 1000== 0 and print("Epoch %d done" % epoch)
 
 plt.plot(l)
+torch.save(model_0.state_dict(), "model_0.torch")
+torch.save(model_1.state_dict(), "model_1.torch")
+torch.save(model_2.state_dict(), "model_2.torch")
+torch.save(model_3.state_dict(), "model_3.torch")
 
 
-
+# Test the network with random state vectors
+# from the environment
 t = []
 for epoch in range(500):
 
