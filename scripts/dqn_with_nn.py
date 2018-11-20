@@ -16,6 +16,8 @@ import torch.nn.functional as F
 import matplotlib
 #matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
+import numpy as np
+from torch.optim import Adam
 
 # hyper parameters
 EPISODES = 1000  # number of episodes
@@ -68,7 +70,7 @@ class Network(nn.Module):
         return x
 
 # Neural network to approximate state vectors
-class StateNet(nn.Module):
+class Net(nn.Module):
 
     def __init__(self):
         super(Net, self).__init__()
@@ -84,6 +86,7 @@ class StateNet(nn.Module):
         return x
 
 
+
 env = gym.make('CartPole-v0')
 
 model = Network().to(device)
@@ -94,10 +97,18 @@ memory = ReplayMemory(10000)
 optimizer = optim.Adam(model.parameters(), LR)
 steps_done = 0
 episode_durations = []
-state0 = StateNet().load_model_dict(torch.load("model_0.torch"))
-state1 = StateNet().load_model_dict(torch.load("model_1.torch"))
-state2 = StateNet().load_model_dict(torch.load("model_2.torch"))
-state3 = StateNet().load_model_dict(torch.load("model_3.torch"))
+model_0 = Net()
+model_1 = Net()
+model_2 = Net()
+model_3 = Net()
+
+class SampleCounter: 
+    def __init__(self):
+        self.counter = 0
+    def increment(self): 
+        self.counter += 1
+    def count(self):
+        return self.counter
 
 
 def select_action(state):
@@ -112,20 +123,25 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(2)]], device=device, dtype=torch.long)
 
-def run_episode(e, environment):
+def run_episode(e, environment, sample_counter, switch, test):
     state = environment.reset()
     steps = 0
     while True:
-        environment.render()
+        # environment.render()
         action = select_action(FloatTensor([state]))
-        _state = action.item()
-        next_state, reward, done, _ = environment.step(_state)
 
-        # Overwrite info from env with our NN preds
-        next_state[0] = state_0(_state[0])
-        next_state[1] = state_1(_state[1])
-        next_state[2] = state_2(_state[2])
-        next_state[3] = state_3(_state[3])
+        st = action.item()
+        if not switch:
+            next_state, reward, done, _ = environment.step(st)
+            samples.append((state, st, next_state, reward, done))
+        else:
+            _ , reward, done, _ = environment.step(st)
+            ip = torch.from_numpy(np.append(state, st)).float()
+            nex0 = model_0(ip)
+            nex1 = model_1(ip)
+            nex2 = model_2(ip)
+            nex3 = model_3(ip)
+            next_state = np.array([nex0.item(), nex1.item(), nex2.item(), nex3.item()])
 
         # negative reward when attempt ends
         if done:
@@ -136,10 +152,19 @@ def run_episode(e, environment):
                      FloatTensor([next_state]),
                      FloatTensor([reward])))
 
-        learn()
+        if not test: 
+            learn()
+        else: 
+            pass
 
-        state = next_state
+        if not switch: 
+            state = next_state
+        else:
+            state = next_state
+            env.env.state = next_state
+
         steps += 1
+        sample_counter.increment()
 
         if done:
             print("{2} Episode {0} finished after {1} steps"
@@ -190,19 +215,111 @@ def plot_durations():
     if len(durations_t) >= 100:
         means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
         means = torch.cat((torch.zeros(99), means))
+        print("mean over last 100 episodes = ", means[-1])
         plt.plot(means.numpy())
     plt.savefig('reward_vs_episode_DDQN.png')
 
     plt.pause(0.001)  # pause a bit so that plots are updated
 
 
-for e in range(EPISODES):
-    run_episode(e, env)
-    if e % TARGET_UPDATE == 0:
-        target.load_state_dict(model.state_dict())
+x = SampleCounter()
+samples = []
 
+# Trains for a number of episodes
+def train(episode_count, switch = False, test = False, reset_episode_durations = False):
+    if reset_episode_durations: 
+        global episode_durations
+        episode_durations = []
+
+    for e in range(episode_count):
+        means = run_episode(e, env, x, switch, test)
+        # print("means = ", means)
+        #if means[-1] >= 195:
+        #    print("CONVERGED!!!!")
+        #    break
+        if e % TARGET_UPDATE == 0:
+            target.load_state_dict(model.state_dict())
+        print("count = ", x.count())
+
+def train_nn():
+    loss_fn = torch.nn.MSELoss(reduction="sum")
+    η = 1e-3
+    opt_0 = Adam(model_0.parameters(), lr = η)
+    opt_1 = Adam(model_1.parameters(), lr = η)
+    opt_2 = Adam(model_2.parameters(), lr = η)
+    opt_3 = Adam(model_3.parameters(), lr = η)
+    plt.figure()
+    l = []
+    for epoch in range(22000):
+        i = random.randint(0, samples_size-1)
+        curr = samples[i][0]
+        st = samples[i][1]
+        nex_0 = samples[i][2][0]
+        nex_0 = [nex_0]
+        nex_0 = np.array(nex_0)
+        nex_0 = torch.from_numpy(nex_0).float()
+        nex_1 = samples[i][2][1]
+        nex_1 = [nex_1]
+        nex_1 = np.array(nex_1)
+        nex_1 = torch.from_numpy(nex_1).float()
+        nex_2 = samples[i][2][2]
+        nex_2 = [nex_2]
+        nex_2 = np.array(nex_2)
+        nex_2 = torch.from_numpy(nex_2).float()
+        nex_3 = samples[i][2][3]
+        nex_3 = [nex_3]
+        nex_3 = np.array(nex_3)
+        nex_3 = torch.from_numpy(nex_3).float()
+        # Create input for our network and generate prediction
+        input = torch.from_numpy(np.append(curr,st)).float()
+        nex_pred_0 = model_0(input)
+        nex_pred_1 = model_1(input)
+        nex_pred_2 = model_2(input)
+        nex_pred_3 = model_3(input)
+        # Calculate loss
+        loss_0 = loss_fn(nex_pred_0, nex_0)
+        loss_1 = loss_fn(nex_pred_1, nex_1)
+        loss_2 = loss_fn(nex_pred_2, nex_2)
+        loss_3 = loss_fn(nex_pred_3, nex_3)
+        # Backprop
+        opt_0.zero_grad()
+        opt_1.zero_grad()
+        opt_2.zero_grad()
+        opt_3.zero_grad()
+        loss_0.backward()
+        loss_1.backward()
+        loss_2.backward()
+        loss_3.backward()
+        opt_0.step()
+        opt_1.step()
+        opt_2.step()
+        opt_3.step()
+        nex_pred = [nex_pred_0.item(),nex_pred_1.item(), nex_pred_2.item(), nex_pred_3.item()]
+        nex_pred = np.array(nex_pred)
+        nex_pred = torch.from_numpy(nex_pred).float()
+        nex      = samples[i][2]
+        nex      = torch.from_numpy(nex).float()
+        loss     = loss_fn(nex,nex_pred)
+        l.append(loss.item())
+    plt.plot(l)
+    plt.savefig("hello.png")
+
+train(200)
+samples_size = len(samples)
+print("Training NN now...")
+train_nn()
+print("Done Training NN.")
+
+# Train DQN with NN doing inference
+model = Network().to(device)
+target = Network().to(device)
+target.load_state_dict(model.state_dict())
+target.eval()
+train(300, switch = True, test = False, reset_episode_durations = True)
+train(101, switch = False, test = True, reset_episode_durations = True)
 
 print('Complete')
+
 env.close()
 plt.ioff()
 plt.show()
