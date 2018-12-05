@@ -123,7 +123,7 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(2)]], device=device, dtype=torch.long)
 
-def run_episode(e, environment, sample_counter, switch, test):
+def run_episode(e, environment, sample_counter, switch, test, debug):
     state = environment.reset()
     steps = 0
     while True:
@@ -135,13 +135,17 @@ def run_episode(e, environment, sample_counter, switch, test):
             next_state, reward, done, _ = environment.step(st)
             samples.append((state, st, next_state, reward, done))
         else:
-            _ , reward, done, _ = environment.step(st)
+            _next , reward, done, _ = environment.step(st)
             ip = torch.from_numpy(np.append(state, st)).float()
             nex0 = model_0(ip)
             nex1 = model_1(ip)
             nex2 = model_2(ip)
             nex3 = model_3(ip)
             next_state = np.array([nex0.item(), nex1.item(), nex2.item(), nex3.item()])
+
+        if debug: 
+            print("state = ", next_state)
+            print("_next = ", _next)
 
         # negative reward when attempt ends
         if done:
@@ -232,7 +236,11 @@ def train(episode_count, switch = False, test = False, reset_episode_durations =
         episode_durations = []
 
     for e in range(episode_count):
-        means = run_episode(e, env, x, switch, test)
+        if len(episode_durations) > 0 and episode_durations[-1] == 200:
+            debug = False
+        else:
+            debug = False
+        means = run_episode(e, env, x, switch, test, debug)
         # print("means = ", means)
         #if means[-1] >= 195:
         #    print("CONVERGED!!!!")
@@ -304,18 +312,20 @@ def train_nn():
     plt.plot(l)
     plt.savefig("hello.png")
 
-train(200)
+train(5)
 samples_size = len(samples)
 print("Training NN now...")
 train_nn()
 print("Done Training NN.")
 
 # Train DQN with NN doing inference
-model = Network().to(device)
-target = Network().to(device)
-target.load_state_dict(model.state_dict())
-target.eval()
-train(300, switch = True, test = False, reset_episode_durations = True)
+
+# model = Network().to(device)
+# target = Network().to(device)
+# target.load_state_dict(model.state_dict())
+# target.eval()
+# optimizer = optim.Adam(model.parameters(), LR)
+train(200, switch = True, test = False, reset_episode_durations = True)
 train(101, switch = False, test = True, reset_episode_durations = True)
 
 print('Complete')
